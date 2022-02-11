@@ -30,21 +30,22 @@ def extract_load_logs_data(cur):
 
 
 def insert_time_data(cur, row):
-    start_time = row.ts
-    hour = pd.to_datetime(start_time, unit='ms').hour
-    day = pd.to_datetime(start_time, unit='ms').day
-    week = pd.to_datetime(start_time, unit='ms').week
-    month = pd.to_datetime(start_time, unit='ms').month
-    year = pd.to_datetime(start_time, unit='ms').year
-    weekday = pd.to_datetime(start_time, unit='ms').dayofweek
-    time_data = {'start_time': start_time, 'hour': hour, 'day': day, 'week': week, 'month': month,
-                 'year': year, 'weekday': weekday}
-    try:
-        cur.execute(insert_time_table, (
-            time_data["start_time"], time_data["hour"], time_data["day"], time_data["week"], time_data["month"],
-            time_data["year"], time_data["weekday"]))
-    except (Exception, Error) as error:
-        print("Error while inserting into PostgreSQL", error)
+    if row.page == "NextSong":
+        start_time = row.ts
+        hour = pd.to_datetime(start_time, unit='ms').hour
+        day = pd.to_datetime(start_time, unit='ms').day
+        week = pd.to_datetime(start_time, unit='ms').week
+        month = pd.to_datetime(start_time, unit='ms').month
+        year = pd.to_datetime(start_time, unit='ms').year
+        weekday = pd.to_datetime(start_time, unit='ms').dayofweek
+        time_data = {'start_time': start_time, 'hour': hour, 'day': day, 'week': week, 'month': month,
+                     'year': year, 'weekday': weekday}
+        try:
+            cur.execute(insert_time_table, (
+                time_data["start_time"], time_data["hour"], time_data["day"], time_data["week"], time_data["month"],
+                time_data["year"], time_data["weekday"]))
+        except (Exception, Error) as error:
+            print("Error while inserting into PostgreSQL", error)
 
 
 def insert_users_data(cur, row):
