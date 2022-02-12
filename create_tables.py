@@ -44,6 +44,8 @@ def createTables(cursor, conn):
         cursor.execute(create_artists_table)
         cursor.execute(create_users_table)
         cursor.execute(create_time_table)
+        # closing connection
+        close(cursor, conn)
         print("successfully creating table")
     except (Exception, Error) as error:
         close(cursor, conn)
