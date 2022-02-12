@@ -4,8 +4,6 @@
 
 ## Project: Data Modeling with Postgres
 
-## [Blog Version](https://medium.com/@sanjeevai/data-modeling-with-postgres-20059b57013b)
-
 ## Table of Contents
 
 - [Introduction](#intro)
