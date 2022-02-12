@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import psycopg2
 from psycopg2 import Error
+import psycopg2.extras
 
 from sql_queries import *
 
@@ -23,65 +24,66 @@ def extract_load_logs_data(cur):
     # example file for testing
     log_json_files_paths = get_files("data/log_data")
     for path in log_json_files_paths:
-        df = pd.read_json(path, lines=True)
+        df = pd.read_json(path, lines=True).query("page == 'NextSong'")
+        print(len(df))
+        time_data = [time_data_mapping(row) for index, row in df.iterrows()]
+        # [x for x in my_list if x.attribute == value]
+        user_data = [row[["userId", "firstName", "lastName", "gender", "level"]] for index, row in df.iterrows()
+                     if row.userId]
+        song_plays_data = []
         for index, row in df.iterrows():
-            insert_users_data(cur, row)
-            insert_time_data(cur, row)
+            # fetching the matched song_id and artist_id from both song and artist tables
+            song_id, artist_id = get_song_artist_id(cur, row)
+            song_plays_data.append(pd.Series(
+                {"time": row.ts, "userId": row.userId, "level": row.level, "songId": song_id,
+                 "artistId": artist_id,
+                 "sessionId": row.sessionId, "location": row.location, "userAgent": row.userAgent},
+                index=["time", "userId", "level", "songId", "artistId", "sessionId", "location", "userAgent"]))
+        # bulk insert into time table
+        psycopg2.extras.execute_batch(cur, insert_time_table, time_data)
+        # bulk insert into users table
+        psycopg2.extras.execute_batch(cur, insert_users_table, user_data)
+        # bulk insert into song_plays table
+        psycopg2.extras.execute_batch(cur, insert_songs_plays_table, song_plays_data)
 
 
-def insert_time_data(cur, row):
-    if row.page == "NextSong":
-        start_time = row.ts
-        hour = pd.to_datetime(start_time, unit='ms').hour
-        day = pd.to_datetime(start_time, unit='ms').day
-        week = pd.to_datetime(start_time, unit='ms').week
-        month = pd.to_datetime(start_time, unit='ms').month
-        year = pd.to_datetime(start_time, unit='ms').year
-        weekday = pd.to_datetime(start_time, unit='ms').dayofweek
-        time_data = {'start_time': start_time, 'hour': hour, 'day': day, 'week': week, 'month': month,
-                     'year': year, 'weekday': weekday}
-        try:
-            cur.execute(insert_time_table, (
-                time_data["start_time"], time_data["hour"], time_data["day"], time_data["week"], time_data["month"],
-                time_data["year"], time_data["weekday"]))
-        except (Exception, Error) as error:
-            print("Error while inserting into PostgreSQL", error)
+def get_song_artist_id(cur, row):
+    # fetching the matched song_id and artist_id from both song and artist tables
+    cur.execute(song_select, (row.song, row.artist, str(row.length)))
+    results = cur.fetchone()
+    song_id, artist_id = None, None
+    if results:
+        song_id, artist_id  = results
+    return song_id, artist_id
 
 
-def insert_users_data(cur, row):
-    try:
-        value = row[["userId", "firstName", "lastName", "gender", "level"]]
-        if value.userId:
-            cur.execute(insert_users_table, value)
-    except (Exception, Error) as error:
-        print("Error while inserting users into PostgreSQL", error)
+def time_data_mapping(row):
+    start_time = row.ts
+    hour = pd.to_datetime(start_time, unit='ms').hour
+    day = pd.to_datetime(start_time, unit='ms').day
+    week = pd.to_datetime(start_time, unit='ms').week
+    month = pd.to_datetime(start_time, unit='ms').month
+    year = pd.to_datetime(start_time, unit='ms').year
+    weekday = pd.to_datetime(start_time, unit='ms').dayofweek
+    return start_time, hour, day, week, month, year, weekday
 
 
 def extract_load_songs_data(cur):
     # example file for testing
     song_json_files_paths = get_files("data/song_data")
-    for path in song_json_files_paths:
-        df = pd.read_json(path, lines=True)
-        for index, row in df.iterrows():
-            insert_song_data(cur, row)
-            insert_artist_data(cur, row)
-
-
-def insert_artist_data(cur, row):
     try:
-        value = row[
-            ["artist_id", "artist_name", "artist_location", "artist_latitude", "artist_longitude"]]
-        cur.execute(insert_artists_table, value)
+        # reading all json files then map it to database model
+        songs_data = [pd.read_json(path, lines=True)[["song_id", "artist_id", "title", "year", "duration"]].values[0]
+                      for path in song_json_files_paths]
+        artists_data = [pd.read_json(path, lines=True)[
+                            ["artist_id", "artist_name", "artist_location", "artist_latitude",
+                             "artist_longitude"]].values[0] for path in song_json_files_paths]
+        # bulk insert
+        psycopg2.extras.execute_batch(cur, insert_songs_table, songs_data)
+        psycopg2.extras.execute_batch(cur, insert_artists_table, artists_data)
+    # cur.execute(insert_songs_table,value)
     except (Exception, Error) as error:
-        print("Error while inserting artist_data into PostgreSQL", error)
-
-
-def insert_song_data(cur, row):
-    try:
-        value = row[["song_id", "artist_id", "title", "year", "duration"]]
-        cur.execute(insert_songs_table, value)
-    except (Exception, Error) as error:
-        print("Error while inserting song_data into PostgreSQL", error)
+        print("Error while inserting into PostgreSQL", error)
 
 
 def main():
